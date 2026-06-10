@@ -73,7 +73,10 @@ Resources:
       InstanceType:
         !FindInMap [EnvironmentTypeToInstanceType, !Ref EnvironmentType, InstanceType]
       SecurityGroups: 
-        - !Ref 'InboundAccessSecurityGroup'
+      #To allow SSH shell access to the bastion instance uncomment the line below to grant inbound ssh security group. If neccessary, remove/comment the isolation security group reference.
+      #This should be implemented during recovery phase and post-incident monitoring should be performed to ensure complete eradication/recovery.
+      # - !Ref 'InboundAccessSecurityGroup'
+        - !Ref 'IsolationSecurityGroup'
       KeyName: !Ref 'KeyName'
   InboundAccessSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -84,6 +87,13 @@ Resources:
         FromPort: 22
         ToPort: 22
         CidrIp: 0.0.0.0/0
+  IsolationSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group to prevent Inbound or Outbound traffic from VPC or Internet"
+      VpcId: !Ref VPC
+      SecurityGroupIngress: []
+      SecurityGroupEgress: []
 
 Outputs:
   InstanceId:
@@ -93,3 +103,37 @@ Outputs:
     Description: URI that points to public SSH end point
     Value: !Sub ssh://${BastionInstance.PublicDnsName}
 
+# INCIDENT RESPONSE PLAYBOOK - BASTION HOST ISOLATION
+# Scenario: Anomalous network activity detected through automated monitoring on the network
+#
+# Detection: 
+# High risk alerts about suspicious traffic from monitoring tools from various sources:
+#  -flow logs, 
+#  -SIEM analysis, 
+#  -AWS GuarddDuty
+#  -Security Hub
+#  -etc.
+#
+# Containment: 
+# Isolate the bastion instance using this template version that includes the isolation security group to explicitly deny all types of inbound/outbound connections.
+# This template includes "- !Ref 'IsolationSecurityGroup'" to the listed bastion security groups and removes the "- !Ref 'InboundAccessSecurityGroup'" line to remove SSH inbound capabilities.
+# The isolationsecuritygroup has the traffic properties "SecurityGroupIngress: []" and "SecurityGroupEgress: []" to explicitly deny any traffic to or from the instance as the array is empty.
+#
+# Eradication: 
+# Analyze system logs, SSH traffic logs, and automated monitoring tools alerts for evidence documentation.
+#  -System logs for traces of tampering or indicators of compromise
+#  -SSH traffic logs for threat actor information such as IP address or lateral movement
+#  -Monitoring alerts for pointers to where compromise began or abnormal activities
+# Perform malware/antivirus scans to remove remains of post-exploitation.
+# If neccessary, Patch any exploited vulnerabilities or edit any misconfigurations.
+#
+# Recovery: 
+# If neccessary, restore and redeploy the bastion instance from a verified good image.
+# Re-add the InboundAccessSecurityGroup to allow internal SSH communication.
+# Remove the IsolationSecurityGroup as the purpose is not needed.
+# Tighten security monitoring tools on the bastion instance to verify that eradication was successful for a specified time after eradication.
+#
+# Lessons Learned: 
+# Update monitoring rules to reduce detection time for future similar threats
+# Document attack-chain and vulnerabilities or misconfigurations leveraged
+# Edit Response playbook related to the bastion instance for improvement in response efforts
